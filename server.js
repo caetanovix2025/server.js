@@ -1,33 +1,62 @@
 const WebSocket = require('ws');
-const http = require('http');
-const port = process.env.PORT || 3000;
+const server = new WebSocket.Server({ port: process.env.PORT || 3000 });
 
-const server = http.createServer();
-const wss = new WebSocket.Server({ server });
+const users = new Map();
 
-let users = [];
+server.on('connection', (socket) => {
+  socket.on('message', (data) => {
+    try {
+      const message = JSON.parse(data);
 
-wss.on('connection', function connection(ws) {
-    console.log('Usuário conectado');
+      if (message.type === 'join') {
+        users.set(socket, { username: message.username });
+        broadcast({ type: 'user-joined', username: message.username });
+      }
 
-    ws.on('message', function incoming(data) {
-        const message = JSON.parse(data);
-        if (message.type === 'join') {
-            users.push({ id: message.id, name: message.name });
+      if (message.type === 'position') {
+        const user = users.get(socket);
+        if (user) {
+          user.position = message.position;
+          broadcast({
+            type: 'update-position',
+            username: user.username,
+            position: message.position,
+          });
         }
+      }
 
-        wss.clients.forEach(function each(client) {
-            if (client !== ws && client.readyState === WebSocket.OPEN) {
-                client.send(data);
-            }
-        });
-    });
+      if (message.type === 'media') {
+        const user = users.get(socket);
+        if (user) {
+          broadcast({
+            type: 'media',
+            username: user.username,
+            media: message.media,
+          });
+        }
+      }
 
-    ws.on('close', () => {
-        console.log('Usuário desconectado');
-    });
+    } catch (err) {
+      console.error('Invalid message received:', err);
+    }
+  });
+
+  socket.on('close', () => {
+    const user = users.get(socket);
+    if (user) {
+      broadcast({ type: 'user-left', username: user.username });
+      users.delete(socket);
+    }
+  });
 });
 
-server.listen(port, () => {
-    console.log(`Servidor WebSocket rodando na porta ${port}`);
-});
+function broadcast(message) {
+  const json = JSON.stringify(message);
+  for (const client of server.clients) {
+    if (client.readyState === WebSocket.OPEN) {
+      client.send(json);
+    }
+  }
+}
+
+console.log('✅ WebSocket server is running...');
