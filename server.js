@@ -1,6 +1,9 @@
 const WebSocket = require('ws');
 const server = new WebSocket.Server({ port: process.env.PORT || 3000 });
-
+const port = process.env.PORT || 3000;
+server.listen(port, () => {
+  console.log(`Servidor WebSocket ouvindo na porta ${port}`);
+});
 const users = new Map();
 
 server.on('connection', (socket) => {
